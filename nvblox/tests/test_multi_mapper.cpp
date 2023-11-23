@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #include <gflags/gflags.h>
+#include <gflags/gflags_gflags.h>
 #include <gtest/gtest.h>
 #include "nvblox/utils/logging.h"
 
@@ -23,13 +24,13 @@ limitations under the License.
 using namespace nvblox;
 
 constexpr float kFloatEpsilon = 1e-6;
-
+std::vector<std::string> test_keys = {"test_key"};
 // MultiMapper child that gives the tests access to the internal
 // functions.
 class TestMultiMapper : public MultiMapper {
  public:
   TestMultiMapper(float voxel_size_m, MemoryType memory_type)
-      : MultiMapper(voxel_size_m, memory_type) {}
+      : MultiMapper(test_keys, voxel_size_m, memory_type) {}
   FRIEND_TEST(MultiMapperTest, MaskOnAndOff);
 };
 

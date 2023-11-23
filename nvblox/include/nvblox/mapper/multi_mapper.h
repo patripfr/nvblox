@@ -24,7 +24,8 @@ namespace nvblox {
 /// mask.
 class MultiMapper {
  public:
-  MultiMapper(float voxel_size_m, MemoryType memory_type = MemoryType::kDevice,
+  MultiMapper(const std::vector<std::string>& keys, float voxel_size_m, 
+              MemoryType memory_type = MemoryType::kDevice,
               ProjectiveLayerType masked_projective_layer_type =
                   ProjectiveLayerType::kOccupancy,
               ProjectiveLayerType unmasked_projective_layer_type =
@@ -46,6 +47,13 @@ class MultiMapper {
                       const Transform& T_L_CD, const Transform& T_CM_CD,
                       const Camera& depth_camera, const Camera& mask_camera);
 
+  void integrateDepthMasked(const DepthImage& depth_frame, 
+                            const MonoImage& mask,
+                            const Transform& T_L_CD, const Transform& T_CM_CD,
+                            const Camera& depth_camera, 
+                            const Camera& mask_camera,
+                            const std::string& key);
+
   /// Integrates a color frame into the reconstruction.
   ///@param color_frame Color image to integrate.
   ///@param mask Mask. Interpreted as 0=non-masked, >0=masked.
@@ -55,11 +63,15 @@ class MultiMapper {
   void integrateColor(const ColorImage& color_frame, const MonoImage& mask,
                       const Transform& T_L_C, const Camera& camera);
 
+  void integrateColorMasked(const ColorImage& color_frame, const MonoImage& mask,
+                      const Transform& T_L_C, const Camera& camera, 
+                      const std::string& key);
+
   // Access to the internal mappers
   const Mapper& unmasked_mapper() const { return *unmasked_mapper_.get(); }
-  const Mapper& masked_mapper() const { return *masked_mapper_.get(); }
   std::shared_ptr<Mapper>& unmasked_mapper() { return unmasked_mapper_; }
-  std::shared_ptr<Mapper>& masked_mapper() { return masked_mapper_; }
+  std::shared_ptr<std::map<std::string, std::shared_ptr<Mapper>>>& 
+      masked_mappers() { return masked_mappers_; }
 
   // These functions return a reference to the masked images generated during
   // the preceeding calls to integrateColor() and integrateDepth().
@@ -96,7 +108,8 @@ class MultiMapper {
 
   // The two mappers to which the frames are integrated.
   std::shared_ptr<Mapper> unmasked_mapper_;
-  std::shared_ptr<Mapper> masked_mapper_;
+  std::shared_ptr<std::map<std::string, std::shared_ptr<Mapper>>> 
+      masked_mappers_;
 };
 
 }  // namespace nvblox
