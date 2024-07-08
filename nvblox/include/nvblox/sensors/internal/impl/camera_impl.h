@@ -35,7 +35,7 @@ bool Camera::project(const Eigen::Vector3f& p_C, Eigen::Vector2f* u_C) const {
   u_C->x() = u_C->x() * fu_ + cu_;
   u_C->y() = u_C->y() * fv_ + cv_;
 
-  if (u_C->x() > width_ || u_C->y() > height_ || u_C->x() < 0 || u_C->y() < 0) {
+  if (u_C->x() >= width_-1 || u_C->y() >= height_-1 || u_C->x() < 0 || u_C->y() < 0) {
     return false;
   }
   return true;

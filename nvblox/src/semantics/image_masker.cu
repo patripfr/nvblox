@@ -111,7 +111,7 @@ __global__ void getMinimumDepthKernel(const float* depth_input,
             (absolute_col >= 0) && (absolute_col < mask_camera.cols())) {
           // Update the minimal depth values seen from the mask camera
           atomicMinFloat(
-              &image::access(absolute_row, absolute_col, cols, min_depth_image),
+              &image::access(absolute_row, absolute_col, mask_camera.cols(), min_depth_image),
               p_CM.z());
         }
       }
@@ -166,10 +166,11 @@ __global__ void splitDepthImageKernel(
     // A point is considered to be occluded on the mask image only if it lies
     // more than the occlusion threshold behind the point occluding it.
     const bool is_occluded =
-        image::access(u_CM.y(), u_CM.x(), cols, min_depth_image) +
+        image::access(u_CM.y(), u_CM.x(), mask_camera.cols(), min_depth_image) +
             occlusion_threshold_m <
         p_CM.z();
-    const bool is_masked = image::access(u_CM.y(), u_CM.x(), cols, mask);
+    
+    const bool is_masked = image::access(u_CM.y(), u_CM.x(), mask_camera.cols(), mask);
 
     // A masked point is only valid if it is not occluded on the mask image.
     if (is_masked && !is_occluded) {
@@ -240,14 +241,15 @@ void ImageMasker::splitImageOnGPU(const ColorImage& input,
   checkCudaErrors(cudaPeekAtLastError());
 }
 
-void ImageMasker::splitImageOnGPU(
-    const DepthImage& depth_input, const MonoImage& mask,
+
+void ImageMasker::minimumDepthImageOnGPU(
+    const DepthImage& depth_input,
+    const MonoImage& mask,
     const Transform& T_CM_CD, const Camera& depth_camera,
-    const Camera& mask_camera, DepthImage* unmasked_depth_output,
-    DepthImage* masked_depth_output, ColorImage* masked_depth_overlay) {
-  timing::Timer image_masking_timer("image_masker/split_depth_image\n");
-  allocateOutput(depth_input, unmasked_depth_output, masked_depth_output,
-                 masked_depth_overlay);
+    const Camera& mask_camera, DepthImage* min_depth_image) {
+
+  *min_depth_image = DepthImage(mask.rows(), mask.cols(), mask.memory_type());
+  // allocateOutput(min_depth_image);
   // Allocate output images if required
 
   // Kernel call params
@@ -260,13 +262,12 @@ void ImageMasker::splitImageOnGPU(
 
   // Initialize the minimum depth image
   constexpr float max_value = std::numeric_limits<float>::max();
-  DepthImage min_depth_image =
-      DepthImage(mask.rows(), mask.cols(), mask.memory_type());
+  
   initializeImageKernel<<<num_blocks, kThreadsPerThreadBlock, 0,
                           cuda_stream_>>>(max_value,                   // NOLINT
-                                          min_depth_image.rows(),      // NOLINT
-                                          min_depth_image.cols(),      // NOLINT
-                                          min_depth_image.dataPtr());  // NOLINT
+                                          min_depth_image->rows(),      // NOLINT
+                                          min_depth_image->cols(),      // NOLINT
+                                          min_depth_image->dataPtr());  // NOLINT
 
   // Find the minimal depth values seen from the mask camera
   constexpr uint8_t kPatchSize = 5;
@@ -278,8 +279,134 @@ void ImageMasker::splitImageOnGPU(
           mask_camera,                 // NOLINT
           depth_input.rows(),          // NOLINT
           depth_input.cols(),          // NOLINT
-          min_depth_image.dataPtr());  // NOLINT
+          min_depth_image->dataPtr());  // NOLINT
+  checkCudaErrors(cudaStreamSynchronize(cuda_stream_));
 
+  CHECK_EQ(mask_camera.rows(), min_depth_image->rows());
+  CHECK_EQ(mask_camera.cols(), min_depth_image->cols());
+
+}
+
+void ImageMasker::splitImageFromMinDepthImageOnGPU(const DepthImage& depth_input, const DepthImage& min_depth_input,
+    const MonoImage& mask,
+    const Transform& T_CM_CD, const Camera& depth_camera, 
+    const Camera& mask_camera, DepthImage* unmasked_depth_output,
+    DepthImage* masked_depth_output, ColorImage* masked_depth_overlay) {
+  allocateOutput(depth_input, unmasked_depth_output, masked_depth_output,
+                 masked_depth_overlay);
+  // Allocate output images if required
+
+  // Kernel call params
+  // - 1 thread per pixel
+  // - 8 x 8 threads per thread block
+  // - N x M thread blocks get 1 thread per pixel
+  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 num_blocks(depth_input.cols() / kThreadsPerThreadBlock.x + 1,
+                        depth_input.rows() / kThreadsPerThreadBlock.y + 1, 1);
+
+  // // Initialize the minimum depth image
+  // constexpr float max_value = std::numeric_limits<float>::max();
+  // // DepthImage min_depth_image =
+  // //     DepthImage(mask.rows(), mask.cols(), mask.memory_type());
+  // initializeImageKernel<<<num_blocks, kThreadsPerThreadBlock, 0,
+  //                         cuda_stream_>>>(max_value,                   // NOLINT
+  //                                         min_depth_image.rows(),      // NOLINT
+  //                                         min_depth_image.cols(),      // NOLINT
+  //                                         min_depth_image.dataPtr());  // NOLINT
+
+  // // Find the minimal depth values seen from the mask camera
+  // constexpr uint8_t kPatchSize = 5;
+  // getMinimumDepthKernel<kPatchSize>
+  //     <<<num_blocks, kThreadsPerThreadBlock, 0, cuda_stream_>>>(
+  //         depth_input.dataConstPtr(),  // NOLINT
+  //         T_CM_CD,                     // NOLINT
+  //         depth_camera,                // NOLINT
+  //         mask_camera,                 // NOLINT
+  //         depth_input.rows(),          // NOLINT
+  //         depth_input.cols(),          // NOLINT
+  //         min_depth_image.dataPtr());  // NOLINT
+  // checkCudaErrors(cudaStreamSynchronize(cuda_stream_));
+
+  CHECK_EQ(depth_camera.rows(), depth_input.rows());
+  CHECK_EQ(depth_camera.cols(), depth_input.cols());  
+  CHECK_EQ(depth_camera.rows(), unmasked_depth_output->rows());
+  CHECK_EQ(depth_camera.cols(), unmasked_depth_output->cols());
+  CHECK_EQ(depth_camera.rows(), masked_depth_output->rows());
+  CHECK_EQ(depth_camera.cols(), masked_depth_output->cols());  
+  CHECK_EQ(mask_camera.rows(), min_depth_input.rows());
+  CHECK_EQ(mask_camera.cols(), min_depth_input.cols());
+  // Split the depth image according to the mask considering occlusion.
+  splitDepthImageKernel<<<num_blocks, kThreadsPerThreadBlock, 0,
+                          cuda_stream_>>>(
+      depth_input.dataConstPtr(),                // NOLINT
+      mask.dataConstPtr(),                       // NOLINT
+      T_CM_CD,                                   // NOLINT
+      depth_camera,                              // NOLINT
+      mask_camera,                               // NOLINT
+      occlusion_threshold_m_,                    // NOLINT
+      depth_input.rows(),                        // NOLINT
+      depth_input.cols(),                        // NOLINT
+      depth_masked_image_invalid_pixel_,         // NOLINT
+      depth_unmasked_image_invalid_pixel_,       // NOLINT
+      min_depth_input.dataConstPtr(),            // NOLINT
+      unmasked_depth_output->dataPtr(),          // NOLINT
+      masked_depth_output->dataPtr(),            // NOLINT
+      getOverlayDataPtr(masked_depth_overlay));  // NOLINT
+
+  checkCudaErrors(cudaStreamSynchronize(cuda_stream_));
+  checkCudaErrors(cudaPeekAtLastError());
+}
+
+void ImageMasker::splitImageOnGPU(
+    const DepthImage& depth_input, const MonoImage& mask,
+    const Transform& T_CM_CD, const Camera& depth_camera,
+    const Camera& mask_camera, DepthImage* unmasked_depth_output,
+    DepthImage* masked_depth_output, ColorImage* masked_depth_overlay) {
+  DepthImage min_depth_image;
+  minimumDepthImageOnGPU(depth_input, mask, T_CM_CD, depth_camera, mask_camera, &min_depth_image);
+  allocateOutput(depth_input, unmasked_depth_output, masked_depth_output,
+                 masked_depth_overlay);
+  // Allocate output images if required
+
+  // Kernel call params
+  // - 1 thread per pixel
+  // - 8 x 8 threads per thread block
+  // - N x M thread blocks get 1 thread per pixel
+  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 num_blocks(depth_input.cols() / kThreadsPerThreadBlock.x + 1,
+                        depth_input.rows() / kThreadsPerThreadBlock.y + 1, 1);
+
+  // // Initialize the minimum depth image
+  // constexpr float max_value = std::numeric_limits<float>::max();
+  // // DepthImage min_depth_image =
+  // //     DepthImage(mask.rows(), mask.cols(), mask.memory_type());
+  // initializeImageKernel<<<num_blocks, kThreadsPerThreadBlock, 0,
+  //                         cuda_stream_>>>(max_value,                   // NOLINT
+  //                                         min_depth_image.rows(),      // NOLINT
+  //                                         min_depth_image.cols(),      // NOLINT
+  //                                         min_depth_image.dataPtr());  // NOLINT
+
+  // // Find the minimal depth values seen from the mask camera
+  // constexpr uint8_t kPatchSize = 5;
+  // getMinimumDepthKernel<kPatchSize>
+  //     <<<num_blocks, kThreadsPerThreadBlock, 0, cuda_stream_>>>(
+  //         depth_input.dataConstPtr(),  // NOLINT
+  //         T_CM_CD,                     // NOLINT
+  //         depth_camera,                // NOLINT
+  //         mask_camera,                 // NOLINT
+  //         depth_input.rows(),          // NOLINT
+  //         depth_input.cols(),          // NOLINT
+  //         min_depth_image.dataPtr());  // NOLINT
+  // checkCudaErrors(cudaStreamSynchronize(cuda_stream_));
+
+  CHECK_EQ(depth_camera.rows(), depth_input.rows());
+  CHECK_EQ(depth_camera.cols(), depth_input.cols());  
+  CHECK_EQ(depth_camera.rows(), unmasked_depth_output->rows());
+  CHECK_EQ(depth_camera.cols(), unmasked_depth_output->cols());
+  CHECK_EQ(depth_camera.rows(), masked_depth_output->rows());
+  CHECK_EQ(depth_camera.cols(), masked_depth_output->cols());  
+  CHECK_EQ(mask_camera.rows(), min_depth_image.rows());
+  CHECK_EQ(mask_camera.cols(), min_depth_image.cols());
   // Split the depth image according to the mask considering occlusion.
   splitDepthImageKernel<<<num_blocks, kThreadsPerThreadBlock, 0,
                           cuda_stream_>>>(
@@ -300,7 +427,6 @@ void ImageMasker::splitImageOnGPU(
 
   checkCudaErrors(cudaStreamSynchronize(cuda_stream_));
   checkCudaErrors(cudaPeekAtLastError());
-  image_masking_timer.Stop();
 }
 
 template <typename ImageType>

@@ -62,6 +62,18 @@ class ImageMasker {
                        DepthImage* masked_depth_output,
                        ColorImage* masked_depth_overlay = nullptr);
 
+  void minimumDepthImageOnGPU(
+    const DepthImage& depth_input,
+    const MonoImage& mask,
+    const Transform& T_CM_CD, const Camera& depth_camera,
+    const Camera& mask_camera, DepthImage* min_depth_image);
+
+void splitImageFromMinDepthImageOnGPU(const DepthImage& depth_input, const DepthImage& min_depth_input,
+    const MonoImage& mask,
+    const Transform& T_CM_CD, const Camera& depth_camera, 
+    const Camera& mask_camera, DepthImage* unmasked_depth_output,
+    DepthImage* masked_depth_output, ColorImage* masked_depth_overlay);
+
   /// A parameter getter
   /// The occlusion threshold parameter associated with the image splitter.
   /// A point is considered to be occluded on the mask image only if it lies

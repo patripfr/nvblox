@@ -15,7 +15,7 @@ limitations under the License.
 */
 #include "nvblox/executables/fuser.h"
 
-#include <gflags/gflags.h>
+#include <gflags/gflags_gflags.h>
 #include "nvblox/utils/logging.h"
 
 #include "nvblox/executables/fuser.h"

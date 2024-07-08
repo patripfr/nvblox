@@ -47,12 +47,28 @@ class MultiMapper {
                       const Transform& T_L_CD, const Transform& T_CM_CD,
                       const Camera& depth_camera, const Camera& mask_camera);
 
+  void integrateDepthFromMin(const DepthImage& depth_frame,
+                            const MonoImage& mask, const Transform& T_L_CD,
+                            const Transform& T_CM_CD,
+                            const Camera& depth_camera,
+                            const Camera& mask_camera);
   void integrateDepthMasked(const DepthImage& depth_frame, 
                             const MonoImage& mask,
                             const Transform& T_L_CD, const Transform& T_CM_CD,
                             const Camera& depth_camera, 
                             const Camera& mask_camera,
                             const std::string& key);
+  void integrateDepthMaskedFromMin(const DepthImage& depth_frame,
+                            const MonoImage& mask, const Transform& T_L_CD,
+                            const Transform& T_CM_CD,
+                            const Camera& depth_camera,
+                            const Camera& mask_camera, 
+                            const std::string& key);  
+  void setMinDepthImage(const DepthImage& depth_frame,
+                                 const MonoImage& mask,
+                                 const Transform& T_CM_CD,
+                                 const Camera& depth_camera,
+                                 const Camera& mask_camera);
 
   /// Integrates a color frame into the reconstruction.
   ///@param color_frame Color image to integrate.
@@ -99,6 +115,7 @@ class MultiMapper {
   ImageMasker image_masker_;
   DepthImage depth_frame_unmasked_;
   DepthImage depth_frame_masked_;
+  DepthImage min_depth_image_;
   ColorImage color_frame_unmasked_;
   ColorImage color_frame_masked_;
 

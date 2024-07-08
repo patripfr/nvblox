@@ -57,6 +57,20 @@ void MultiMapper::integrateDepth(const DepthImage& depth_frame,
   // Integrate the frames to the respective layer cake
   unmasked_mapper_->integrateDepth(depth_frame_unmasked_, T_L_CD, depth_camera);
 }
+
+void MultiMapper::integrateDepthFromMin(const DepthImage& depth_frame,
+                                 const MonoImage& mask, const Transform& T_L_CD,
+                                 const Transform& T_CM_CD,
+                                 const Camera& depth_camera,
+                                 const Camera& mask_camera) {
+  // Split masked and non masked depth frame
+  image_masker_.splitImageFromMinDepthImageOnGPU(depth_frame, min_depth_image_, mask, T_CM_CD, depth_camera,
+                                mask_camera, &depth_frame_unmasked_,
+                                &depth_frame_masked_, &masked_depth_overlay_);
+
+  // Integrate the frames to the respective layer cake
+  unmasked_mapper_->integrateDepth(depth_frame_unmasked_, T_L_CD, depth_camera);
+}
 void MultiMapper::integrateDepthMasked(const DepthImage& depth_frame,
                                  const MonoImage& mask, const Transform& T_L_CD,
                                  const Transform& T_CM_CD,
@@ -69,6 +83,29 @@ void MultiMapper::integrateDepthMasked(const DepthImage& depth_frame,
                                 &depth_frame_masked_, &masked_depth_overlay_);
   masked_mappers_->at(key)->integrateDepth(depth_frame_masked_, T_L_CD, 
                                            depth_camera);
+}
+
+void MultiMapper::integrateDepthMaskedFromMin(const DepthImage& depth_frame,
+                                 const MonoImage& mask, const Transform& T_L_CD,
+                                 const Transform& T_CM_CD,
+                                 const Camera& depth_camera,
+                                 const Camera& mask_camera, 
+                                 const std::string& key) {
+  // Split masked and non masked depth frame
+  image_masker_.splitImageFromMinDepthImageOnGPU(depth_frame, min_depth_image_, mask, T_CM_CD, depth_camera,
+                                mask_camera, &depth_frame_unmasked_,
+                                &depth_frame_masked_, &masked_depth_overlay_);
+  masked_mappers_->at(key)->integrateDepth(depth_frame_masked_, T_L_CD, 
+                                           depth_camera);
+}
+
+void MultiMapper::setMinDepthImage(const DepthImage& depth_frame,
+                                 const MonoImage& mask,
+                                 const Transform& T_CM_CD,
+                                 const Camera& depth_camera,
+                                 const Camera& mask_camera) {
+  // Split masked and non masked depth frame
+  image_masker_.minimumDepthImageOnGPU(depth_frame, mask, T_CM_CD, depth_camera, mask_camera, &min_depth_image_);
 }
 
 void MultiMapper::integrateColor(const ColorImage& color_frame,
