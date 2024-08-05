@@ -133,6 +133,11 @@ void MultiMapper::integrateColorMasked(const ColorImage& color_frame,
 const DepthImage& MultiMapper::getLastDepthFrameUnmasked() {
   return depth_frame_unmasked_;
 }
+
+const DepthImage& MultiMapper::getMinDepthImage() {
+    return min_depth_image_;
+  }
+
 const DepthImage& MultiMapper::getLastDepthFrameMasked() {
   return depth_frame_masked_;
 }

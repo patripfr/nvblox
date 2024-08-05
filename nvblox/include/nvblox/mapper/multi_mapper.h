@@ -70,6 +70,7 @@ class MultiMapper {
                                  const Camera& depth_camera,
                                  const Camera& mask_camera);
 
+
   /// Integrates a color frame into the reconstruction.
   ///@param color_frame Color image to integrate.
   ///@param mask Mask. Interpreted as 0=non-masked, >0=masked.
@@ -97,6 +98,7 @@ class MultiMapper {
   const ColorImage& getLastColorFrameMasked();
   const ColorImage& getLastDepthFrameMaskOverlay();
   const ColorImage& getLastColorFrameMaskOverlay();
+  const DepthImage& getMinDepthImage();
 
   /// Setting the depth value for unmasked depth pixels on the masked output
   /// frame.

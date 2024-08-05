@@ -179,12 +179,17 @@ __global__ void splitDepthImageKernel(
                          masked_depth_output);
       // Overlay the mask onto the depth overlay image
       if (masked_depth_overlay) {
-        image::access(row_idx, col_idx, cols, masked_depth_overlay).r = 255u;
+        image::access(row_idx, col_idx, cols, masked_depth_overlay).b = 255u;
       }
+    } else if(is_masked) {
+      if (masked_depth_overlay) {
+        image::access(row_idx, col_idx, cols, masked_depth_overlay).r = 255u;
+      }    
     } else {
       copyToUnmaskedOutput(depth_input, row_idx, col_idx, cols,
                            masked_image_invalid_pixel, unmasked_depth_output,
                            masked_depth_output);
+      
     }
   } else {
     // If the projection failed, the input pixel is not masked
@@ -257,13 +262,15 @@ void ImageMasker::minimumDepthImageOnGPU(
   // - 8 x 8 threads per thread block
   // - N x M thread blocks get 1 thread per pixel
   constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
-  const dim3 num_blocks(depth_input.cols() / kThreadsPerThreadBlock.x + 1,
-                        depth_input.rows() / kThreadsPerThreadBlock.y + 1, 1);
-
+  const dim3 num_blocks_depth(depth_input.cols() / kThreadsPerThreadBlock.x + 1,
+                              depth_input.rows() / kThreadsPerThreadBlock.y + 1,
+                              1);
+  const dim3 num_blocks_mask(mask.cols() / kThreadsPerThreadBlock.x + 1,
+                             mask.rows() / kThreadsPerThreadBlock.y + 1, 1);
   // Initialize the minimum depth image
   constexpr float max_value = std::numeric_limits<float>::max();
   
-  initializeImageKernel<<<num_blocks, kThreadsPerThreadBlock, 0,
+  initializeImageKernel<<<num_blocks_mask, kThreadsPerThreadBlock, 0,
                           cuda_stream_>>>(max_value,                   // NOLINT
                                           min_depth_image->rows(),      // NOLINT
                                           min_depth_image->cols(),      // NOLINT
@@ -272,7 +279,7 @@ void ImageMasker::minimumDepthImageOnGPU(
   // Find the minimal depth values seen from the mask camera
   constexpr uint8_t kPatchSize = 5;
   getMinimumDepthKernel<kPatchSize>
-      <<<num_blocks, kThreadsPerThreadBlock, 0, cuda_stream_>>>(
+      <<<num_blocks_depth, kThreadsPerThreadBlock, 0, cuda_stream_>>>(
           depth_input.dataConstPtr(),  // NOLINT
           T_CM_CD,                     // NOLINT
           depth_camera,                // NOLINT
